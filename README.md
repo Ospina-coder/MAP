@@ -55,4 +55,5 @@ Consulta [la guía de API](mallab/API.md) para iniciar Redis y Celery, subir arc
 con `curl` y consultar sus reportes. Las rutas están registradas bajo `/api/`;
 la subida admite peticiones anónimas y está exenta de CSRF durante las pruebas.
 La consulta de reportes requiere sesión Django y respeta la propiedad de cada
-muestra. Ejecuta `python manage.py migrate` para admitir muestras sin usuario.
+muestra. Las subidas anónimas se asignan al primer usuario existente; si no hay
+usuarios, la API devuelve un error JSON `503`.

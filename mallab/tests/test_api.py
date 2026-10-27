@@ -91,13 +91,27 @@ class SampleAPITests(TransactionTestCase):
         self.assertEqual(response.status_code, 202)
         self.assertEqual(response["Content-Type"], "application/json")
         sample = Sample.objects.get(pk=response.json()["sample_id"])
-        self.assertIsNone(sample.uploaded_by_id)
+        self.assertEqual(sample.uploaded_by, self.user)
         self.assertEqual(response.json()["status"], "PENDING")
         dispatch.assert_called_once_with(args=[sample.pk], retry=False)
         self.assertEqual(Sample.objects.count(), 2)
         self.assertEqual(client.get(response.json()["report_url"]).status_code, 401)
         client.force_login(self.user)
+        self.assertEqual(client.get(response.json()["report_url"]).status_code, 200)
+        client.force_login(self.other)
         self.assertEqual(client.get(response.json()["report_url"]).status_code, 404)
+
+    def test_anonymous_upload_without_users_returns_json_error(self):
+        self.client.logout()
+        User.objects.all().delete()
+        with patch("mallab.views.analyze_sample_task.apply_async") as dispatch:
+            response = self.upload()
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.json()["error"], "upload_owner_unavailable")
+        self.assertFalse(Sample.objects.exists())
+        self.assertFalse(AnalysisReport.objects.exists())
+        self.assertFalse([path for path in Path(self.media.name).rglob("*") if path.is_file()])
+        dispatch.assert_not_called()
 
     def test_worker_results_and_owner_only_access(self):
         with patch("mallab.views.analyze_sample_task.apply_async"):

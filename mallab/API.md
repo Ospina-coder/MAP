@@ -39,11 +39,13 @@ configura PostgreSQL, HTTPS y las cookies seguras en el despliegue. No publiques
 ## Contrato HTTP
 
 Durante las pruebas, la subida admite peticiones anónimas y está exenta de CSRF.
-Ejecuta `python manage.py migrate` para aplicar la migración que permite guardar
-`uploaded_by=NULL`. Si hay una sesión activa, la muestra conserva ese propietario.
+Si hay una sesión autenticada, la muestra conserva ese propietario. Las subidas
+anónimas se asignan al primer usuario (`User.objects.first()`) para admitir también
+bases que exigen `uploaded_by NOT NULL`. Debe existir al menos un usuario; si no,
+la subida devuelve `503` con `error=upload_owner_unavailable` sin guardar archivos.
 La consulta de reportes requiere sesión Django y propiedad de la muestra, incluso
-para usuarios staff. Los reportes de muestras anónimas no están disponibles por
-este endpoint. No se implementa autenticación mediante API key.
+para usuarios staff. Los reportes de subidas anónimas se consultan con la sesión
+del usuario al que fueron asignadas. No se implementa autenticación mediante API key.
 
 | Método y ruta | Resultado |
 | --- | --- |

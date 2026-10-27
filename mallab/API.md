@@ -38,7 +38,7 @@ configura PostgreSQL, HTTPS y las cookies seguras en el despliegue. No publiques
 
 ## Contrato HTTP
 
-Las vistas usan sesiones Django y conservan CSRF. No implementan autenticación
+Las vistas usan sesiones Django; la subida está exenta de CSRF. No implementan autenticación
 mediante API key. Los usuarios deben iniciar sesión mediante la interfaz de
 autenticación del proyecto; para esta prueba local puedes usar el superusuario
 en `/admin/login/` y sus cookies. La autorización de la API exige propiedad de la
@@ -67,7 +67,7 @@ el GET incluye `Retry-After: 3`. En `COMPLETED`, `results` contiene `entropy`,
 imports), `yara_matches` y el estado del escaneo `yara`.
 
 Errores: `400` por archivo ausente o múltiple, `401` por sesión ausente/inactiva,
-`403` por CSRF inválido, `404` por muestra ajena/inexistente o reporte inexistente,
+`404` por muestra ajena/inexistente o reporte inexistente,
 `413` por tamaño y `415` por contenido distinto de multipart. Un reporte `FAILED`
 se consulta con HTTP `200`, con su estado y un error genérico.
 
@@ -80,13 +80,12 @@ al worker; no se sobrescriben estados ya reclamados por este.
 
 ## Ejemplo curl
 
-Después de iniciar sesión en `/admin/`, toma las cookies `sessionid` y `csrftoken`
-de esa sesión. En Bash, usando valores locales de prueba:
+Después de iniciar sesión en `/admin/`, toma la cookie `sessionid`
+de esa sesión. No se requiere token CSRF para la subida. En Bash:
 
 ```bash
 curl -i http://127.0.0.1:8000/api/samples/ \
-  -b "sessionid=$SESSION_ID; csrftoken=$CSRF_TOKEN" \
-  -H "X-CSRFToken: $CSRF_TOKEN" \
+  -b "sessionid=$SESSION_ID" \
   -F "file=@./muestra.exe"
 
 curl http://127.0.0.1:8000/api/samples/1/report/ \
@@ -124,7 +123,7 @@ simultáneas y devuelve el reporte existente cuando ya está `COMPLETED`.
 python manage.py test mallab.tests --settings=mallab.tests.settings
 ```
 
-Incluyen autenticación, CSRF, permisos por propietario, tamaño, limpieza en rollback,
+Incluyen autenticación, subida sin token CSRF, permisos por propietario, tamaño, limpieza en rollback,
 publicación tras commit, fallos del broker, resultados y consumo por un worker
 Celery real con transporte en memoria. Redis debe comprobarse en el despliegue.
 

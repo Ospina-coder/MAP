@@ -53,4 +53,5 @@ La migración `0002_sample_file` añade la referencia al archivo para las muestr
 
 Consulta [la guía de API](mallab/API.md) para iniciar Redis y Celery, subir archivos
 con `curl` y consultar sus reportes. Las rutas están registradas bajo `/api/`;
-requieren sesión Django y respetan CSRF y la propiedad de cada muestra.
+requieren sesión Django y respetan la propiedad de cada muestra. La subida está
+exenta de CSRF para clientes externos.

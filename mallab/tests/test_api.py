@@ -76,14 +76,21 @@ class SampleAPITests(TransactionTestCase):
         self.client.force_login(self.user)
         self.assertEqual(self.upload().status_code, 401)
 
-    def test_csrf_protection(self):
+    def test_upload_without_csrf_returns_sample_id_and_status(self):
         client = Client(enforce_csrf_checks=True)
         client.force_login(self.user)
-        self.assertEqual(client.post(self.upload_url, {"file": SimpleUploadedFile("a", b"a")}).status_code, 403)
-        client.get("/admin/login/")
         with patch("mallab.views.analyze_sample_task.apply_async"):
-            response = client.post(self.upload_url, {"file": SimpleUploadedFile("a", b"a")}, HTTP_X_CSRFTOKEN=client.cookies["csrftoken"].value)
+            response = client.post(self.upload_url, {"file": SimpleUploadedFile("a", b"a")})
         self.assertEqual(response.status_code, 202)
+        self.assertEqual(response["Content-Type"], "application/json")
+        self.assertEqual(response.json()["sample_id"], Sample.objects.get().pk)
+        self.assertEqual(response.json()["status"], "PENDING")
+
+        client.logout()
+        response = client.post(self.upload_url, {"file": SimpleUploadedFile("a", b"a")})
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.json()["error"], "authentication_required")
+        self.assertEqual(Sample.objects.count(), 1)
 
     def test_worker_results_and_owner_only_access(self):
         with patch("mallab.views.analyze_sample_task.apply_async"):

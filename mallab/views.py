@@ -1,4 +1,4 @@
-"""API JSON con autenticación de sesión, CSRF y acceso por propietario."""
+"""API JSON con sesión y acceso por propietario; subida exenta de CSRF."""
 
 import hashlib
 import logging
@@ -7,6 +7,7 @@ from django.db import transaction
 from django.http import JsonResponse
 from django.urls import reverse
 from django.views.decorators.cache import never_cache
+from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
 from .models import AnalysisReport, Sample
@@ -22,6 +23,7 @@ def _authenticated(request):
 
 
 @transaction.non_atomic_requests
+@csrf_exempt
 @never_cache
 @require_POST
 def upload_sample(request):

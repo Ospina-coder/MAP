@@ -30,7 +30,7 @@ DEBUG = os.environ.get('DJANGO_DEBUG', '1') == '1'
 if not DEBUG and not os.environ.get('DJANGO_SECRET_KEY'):
     raise ImproperlyConfigured('DJANGO_SECRET_KEY es obligatorio con DEBUG=False.')
 
-ALLOWED_HOSTS = os.environ.get('DJANGO_ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
+ALLOWED_HOSTS = ['100.65.59.31', '127.0.0.1', 'localhost', '*']
 
 
 # Application definition

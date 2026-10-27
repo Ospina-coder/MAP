@@ -1,5 +1,6 @@
 """Pruebas HTTP, aislamiento por usuario, publicación y ejecución de tareas."""
 
+import base64
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
@@ -8,6 +9,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import transaction
 from django.test import Client, TransactionTestCase, override_settings
 from django.urls import reverse
+from rest_framework.authtoken.models import Token
 
 from mallab.models import AnalysisReport, Sample, User
 from mallab.tasks import analyze_sample_task
@@ -75,43 +77,65 @@ class SampleAPITests(TransactionTestCase):
         self.client.force_login(self.user)
         self.assertEqual(self.client.get("/api/samples/1/report/").status_code, 401)
 
-    def test_upload_without_csrf_returns_sample_id_and_status(self):
+    def test_basic_and_token_upload_without_csrf(self):
         client = Client(enforce_csrf_checks=True)
-        client.force_login(self.user)
-        with patch("mallab.views.analyze_sample_task.apply_async"):
-            response = client.post(self.upload_url, {"file": SimpleUploadedFile("a", b"a")})
-        self.assertEqual(response.status_code, 202)
-        self.assertEqual(response["Content-Type"], "application/json")
-        self.assertEqual(response.json()["sample_id"], Sample.objects.get().pk)
-        self.assertEqual(response.json()["status"], "PENDING")
+        self.user.set_password("test-password")
+        self.user.save(update_fields=["password"])
+        token = Token.objects.create(user=self.user)
+        basic = base64.b64encode(b"owner:test-password").decode("ascii")
+        for authorization in (f"Basic {basic}", f"Token {token.key}"):
+            with self.subTest(scheme=authorization.split()[0]):
+                with patch("mallab.views.analyze_sample_task.apply_async") as dispatch:
+                    response = client.post(
+                        self.upload_url, {"file": SimpleUploadedFile("a", b"a")},
+                        HTTP_AUTHORIZATION=authorization,
+                    )
+                self.assertEqual(response.status_code, 202)
+                self.assertEqual(response["Content-Type"], "application/json")
+                sample = Sample.objects.get(pk=response.json()["sample_id"])
+                self.assertEqual(sample.uploaded_by, self.user)
+                self.assertEqual(response.json()["status"], "PENDING")
+                dispatch.assert_called_once_with(args=[sample.pk], retry=False)
+                report = client.get(response.json()["report_url"], HTTP_AUTHORIZATION=authorization)
+                self.assertEqual(report.status_code, 200)
 
-        client.logout()
+    def test_anonymous_upload_is_rejected_before_saving(self):
+        client = Client(enforce_csrf_checks=True)
         with patch("mallab.views.analyze_sample_task.apply_async") as dispatch:
             response = client.post(self.upload_url, {"file": SimpleUploadedFile("a", b"a")})
-        self.assertEqual(response.status_code, 202)
+        self.assertEqual(response.status_code, 401)
         self.assertEqual(response["Content-Type"], "application/json")
-        sample = Sample.objects.get(pk=response.json()["sample_id"])
-        self.assertEqual(sample.uploaded_by, self.user)
-        self.assertEqual(response.json()["status"], "PENDING")
-        dispatch.assert_called_once_with(args=[sample.pk], retry=False)
-        self.assertEqual(Sample.objects.count(), 2)
-        self.assertEqual(client.get(response.json()["report_url"]).status_code, 401)
-        client.force_login(self.user)
-        self.assertEqual(client.get(response.json()["report_url"]).status_code, 200)
-        client.force_login(self.other)
-        self.assertEqual(client.get(response.json()["report_url"]).status_code, 404)
-
-    def test_anonymous_upload_without_users_returns_json_error(self):
-        self.client.logout()
-        User.objects.all().delete()
-        with patch("mallab.views.analyze_sample_task.apply_async") as dispatch:
-            response = self.upload()
-        self.assertEqual(response.status_code, 503)
-        self.assertEqual(response.json()["error"], "upload_owner_unavailable")
+        self.assertIn("detail", response.json())
         self.assertFalse(Sample.objects.exists())
         self.assertFalse(AnalysisReport.objects.exists())
         self.assertFalse([path for path in Path(self.media.name).rglob("*") if path.is_file()])
         dispatch.assert_not_called()
+
+    def test_invalid_and_inactive_credentials_are_rejected(self):
+        self.user.set_password("test-password")
+        token = Token.objects.create(user=self.user)
+        self.user.is_active = False
+        self.user.save(update_fields=["is_active", "password"])
+        basic = base64.b64encode(b"owner:test-password").decode("ascii")
+        for authorization in ("Basic invalid", f"Basic {basic}", "Token invalid", f"Token {token.key}"):
+            with self.subTest(scheme=authorization.split()[0]):
+                with patch("mallab.views.analyze_sample_task.apply_async") as dispatch:
+                    response = Client().post(
+                        self.upload_url, {"file": SimpleUploadedFile("a", b"a")},
+                        HTTP_AUTHORIZATION=authorization,
+                    )
+                self.assertEqual(response.status_code, 401)
+                dispatch.assert_not_called()
+        self.assertFalse(Sample.objects.exists())
+
+    def test_session_upload_requires_csrf(self):
+        client = Client(enforce_csrf_checks=True)
+        client.force_login(self.user)
+        with patch("mallab.views.analyze_sample_task.apply_async") as dispatch:
+            response = client.post(self.upload_url, {"file": SimpleUploadedFile("a", b"a")})
+        self.assertEqual(response.status_code, 403)
+        dispatch.assert_not_called()
+        self.assertFalse(Sample.objects.exists())
 
     def test_worker_results_and_owner_only_access(self):
         with patch("mallab.views.analyze_sample_task.apply_async"):

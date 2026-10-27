@@ -38,14 +38,17 @@ configura PostgreSQL, HTTPS y las cookies seguras en el despliegue. No publiques
 
 ## Contrato HTTP
 
-Durante las pruebas, la subida admite peticiones anónimas y está exenta de CSRF.
-Si hay una sesión autenticada, la muestra conserva ese propietario. Las subidas
-anónimas se asignan al primer usuario (`User.objects.first()`) para admitir también
-bases que exigen `uploaded_by NOT NULL`. Debe existir al menos un usuario; si no,
-la subida devuelve `503` con `error=upload_owner_unavailable` sin guardar archivos.
-La consulta de reportes requiere sesión Django y propiedad de la muestra, incluso
-para usuarios staff. Los reportes de subidas anónimas se consultan con la sesión
-del usuario al que fueron asignadas. No se implementa autenticación mediante API key.
+La subida y la consulta requieren `IsAuthenticated` de Django REST Framework.
+Aceptan Basic Auth, `Authorization: Token <token>` o una sesión Django activa.
+Cada muestra se asigna a `request.user`; no se admiten subidas anónimas ni se
+asignan muestras al primer usuario. Los reportes exigen propiedad de la muestra,
+incluso para usuarios staff. Basic y Token no requieren CSRF; las peticiones POST
+con sesión requieren token CSRF. Usa HTTPS para enviar credenciales.
+
+Tras actualizar, instala `requirements.txt` y ejecuta `python manage.py migrate`
+para crear las tablas de `rest_framework.authtoken`. Genera un token para un
+usuario existente con `python manage.py drf_create_token <username>`.
+Estos tokens son distintos del campo personalizado `User.api_key`.
 
 | Método y ruta | Resultado |
 | --- | --- |
@@ -69,7 +72,8 @@ el GET incluye `Retry-After: 3`. En `COMPLETED`, `results` contiene `entropy`,
 `hashes` (MD5 y SHA-256), `file_size`, `file_type`, `pe_headers` (secciones e
 imports), `yara_matches` y el estado del escaneo `yara`.
 
-Errores: `400` por archivo ausente o múltiple, `401` por sesión ausente/inactiva al consultar reportes,
+Errores: `400` por archivo ausente o múltiple, `401` por credenciales ausentes o inválidas,
+`403` por CSRF inválido al usar sesión,
 `404` por muestra ajena/inexistente o reporte inexistente,
 `413` por tamaño y `415` por contenido distinto de multipart. Un reporte `FAILED`
 se consulta con HTTP `200`, con su estado y un error genérico.
@@ -83,15 +87,19 @@ al worker; no se sobrescriben estados ya reclamados por este.
 
 ## Ejemplo curl
 
-La subida no requiere cookies ni token CSRF. En Bash:
+Ejemplo con Basic Auth (curl solicita la contraseña) y Token. En Bash:
 
 ```bash
 curl -i http://127.0.0.1:8000/api/samples/ \
+  --user "$USERNAME" \
   -F "file=@./muestra.exe"
 
-# Para consultar una muestra subida con sesión, usa la cookie de su propietario:
+curl -i http://127.0.0.1:8000/api/samples/ \
+  -H "Authorization: Token $API_TOKEN" \
+  -F "file=@./muestra.exe"
+
 curl http://127.0.0.1:8000/api/samples/1/report/ \
-  -b "sessionid=$SESSION_ID"
+  -H "Authorization: Token $API_TOKEN"
 ```
 
 En PowerShell usa `curl.exe` y el carácter de continuación propio de PowerShell,
@@ -125,7 +133,7 @@ simultáneas y devuelve el reporte existente cuando ya está `COMPLETED`.
 python manage.py test mallab.tests --settings=mallab.tests.settings
 ```
 
-Incluyen autenticación de reportes, subida anónima sin token CSRF, permisos por propietario, tamaño, limpieza en rollback,
+Incluyen Basic Auth, Token, rechazo de anónimos, permisos por propietario, tamaño, limpieza en rollback,
 publicación tras commit, fallos del broker, resultados y consumo por un worker
 Celery real con transporte en memoria. Redis debe comprobarse en el despliegue.
 

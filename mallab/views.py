@@ -1,4 +1,4 @@
-"""API JSON con subida anónima y consulta de reportes por propietario."""
+"""API JSON autenticada con acceso a reportes por propietario."""
 
 import hashlib
 import logging
@@ -8,27 +8,28 @@ from django.http import JsonResponse
 from django.urls import reverse
 from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_GET, require_POST
+from rest_framework.authentication import BasicAuthentication, SessionAuthentication, TokenAuthentication
+from rest_framework.decorators import api_view, authentication_classes, permission_classes, renderer_classes
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.renderers import JSONRenderer
 
-from .models import AnalysisReport, Sample, User
+from .models import AnalysisReport, Sample
 from .tasks import analyze_sample_task
 from .upload_handlers import upload_limit
 
 logger = logging.getLogger(__name__)
 
 
-def _authenticated(request):
-    """Exige una sesión autenticada y activa, sin redirigir a HTML."""
-    return request.user.is_authenticated and request.user.is_active
-
-
 @transaction.non_atomic_requests
 @csrf_exempt
 @never_cache
-@require_POST
+@api_view(["POST"])
+@authentication_classes([BasicAuthentication, TokenAuthentication, SessionAuthentication])
+@permission_classes([IsAuthenticated])
+@renderer_classes([JSONRenderer])
 def upload_sample(request):
     """Acepta un único archivo, crea PENDING y publica la tarea tras el commit."""
-    if request.content_type != "multipart/form-data":
+    if request.content_type.split(";", 1)[0].strip() != "multipart/form-data":
         return JsonResponse({"error": "multipart_required"}, status=415)
 
     files = request.FILES
@@ -41,17 +42,6 @@ def upload_sample(request):
         return JsonResponse({"error": "file_too_large", "max_bytes": upload_limit()}, status=413)
     if not uploaded.name or len(uploaded.name) > 255:
         return JsonResponse({"error": "invalid_file_name"}, status=400)
-
-    if request.user.is_authenticated:
-        uploaded_by = request.user
-    else:
-        # Compatible con bases de pruebas que aún exigen uploaded_by NOT NULL.
-        uploaded_by = User.objects.first()
-        if uploaded_by is None:
-            return JsonResponse({
-                "error": "upload_owner_unavailable",
-                "message": "Crea un usuario para asociar las muestras anónimas durante las pruebas.",
-            }, status=503)
 
     # Identificación ligera durante la ingestión. PE, entropía y YARA son del worker.
     digest = hashlib.sha256()
@@ -66,7 +56,7 @@ def upload_sample(request):
     sample = Sample(
         file=uploaded, file_name=uploaded.name, file_size=size,
         hash=digest.hexdigest(), file_type="application/octet-stream",
-        uploaded_by=uploaded_by,
+        uploaded_by=request.user,
     )
     # File Storage no participa en transacciones: limpiar si falla la escritura SQL.
     try:
@@ -109,11 +99,12 @@ def upload_sample(request):
 
 
 @never_cache
-@require_GET
+@api_view(["GET"])
+@authentication_classes([BasicAuthentication, TokenAuthentication, SessionAuthentication])
+@permission_classes([IsAuthenticated])
+@renderer_classes([JSONRenderer])
 def get_analysis_report(request, sample_id):
     """Devuelve el estado y, al completar, resultados de una muestra propia."""
-    if not _authenticated(request):
-        return JsonResponse({"error": "authentication_required"}, status=401)
     sample = Sample.objects.filter(pk=sample_id, uploaded_by=request.user).first()
     if sample is None:
         return JsonResponse({"error": "sample_not_found"}, status=404)

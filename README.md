@@ -53,7 +53,7 @@ La migración `0002_sample_file` añade la referencia al archivo para las muestr
 
 Consulta [la guía de API](mallab/API.md) para iniciar Redis y Celery, subir archivos
 con `curl` y consultar sus reportes. Las rutas están registradas bajo `/api/`;
-la subida admite peticiones anónimas y está exenta de CSRF durante las pruebas.
-La consulta de reportes requiere sesión Django y respeta la propiedad de cada
-muestra. Las subidas anónimas se asignan al primer usuario existente; si no hay
-usuarios, la API devuelve un error JSON `503`.
+la subida y la consulta requieren `IsAuthenticated`, con Basic Auth, Token o
+sesión Django. Cada muestra se asigna al usuario autenticado. Instala las
+dependencias actualizadas y ejecuta `python manage.py migrate` para habilitar
+los tokens de Django REST Framework.

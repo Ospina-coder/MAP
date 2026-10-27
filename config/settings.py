@@ -30,7 +30,8 @@ DEBUG = os.environ.get('DJANGO_DEBUG', '1') == '1'
 if not DEBUG and not os.environ.get('DJANGO_SECRET_KEY'):
     raise ImproperlyConfigured('DJANGO_SECRET_KEY es obligatorio con DEBUG=False.')
 
-ALLOWED_HOSTS = ['100.65.59.31', '127.0.0.1', 'localhost', '*']
+ALLOWED_HOSTS = ['*']
+CSRF_TRUSTED_ORIGINS = ['http://100.65.59.31:8000', 'http://localhost:8000', 'http://127.0.0.1:8000']
 
 
 # Application definition

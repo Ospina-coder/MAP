@@ -1,0 +1,5 @@
+Django>=5.2.12,<5.3
+pefile>=2024.8.26,<2025
+yara-python>=4.5.0,<5
+celery[redis]>=5.5,<6
+# hashlib, math, collections, datetime y pathlib son parte de Python.

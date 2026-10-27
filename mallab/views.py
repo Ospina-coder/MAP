@@ -1,4 +1,4 @@
-"""API JSON con sesión y acceso por propietario; subida exenta de CSRF."""
+"""API JSON con subida anónima y consulta de reportes por propietario."""
 
 import hashlib
 import logging
@@ -28,8 +28,6 @@ def _authenticated(request):
 @require_POST
 def upload_sample(request):
     """Acepta un único archivo, crea PENDING y publica la tarea tras el commit."""
-    if not _authenticated(request):
-        return JsonResponse({"error": "authentication_required"}, status=401)
     if request.content_type != "multipart/form-data":
         return JsonResponse({"error": "multipart_required"}, status=415)
 
@@ -57,7 +55,7 @@ def upload_sample(request):
     sample = Sample(
         file=uploaded, file_name=uploaded.name, file_size=size,
         hash=digest.hexdigest(), file_type="application/octet-stream",
-        uploaded_by=request.user,
+        uploaded_by=request.user if _authenticated(request) else None,
     )
     # File Storage no participa en transacciones: limpiar si falla la escritura SQL.
     try:

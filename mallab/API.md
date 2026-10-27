@@ -38,11 +38,12 @@ configura PostgreSQL, HTTPS y las cookies seguras en el despliegue. No publiques
 
 ## Contrato HTTP
 
-Las vistas usan sesiones Django; la subida está exenta de CSRF. No implementan autenticación
-mediante API key. Los usuarios deben iniciar sesión mediante la interfaz de
-autenticación del proyecto; para esta prueba local puedes usar el superusuario
-en `/admin/login/` y sus cookies. La autorización de la API exige propiedad de la
-muestra, incluso para usuarios staff.
+Durante las pruebas, la subida admite peticiones anónimas y está exenta de CSRF.
+Ejecuta `python manage.py migrate` para aplicar la migración que permite guardar
+`uploaded_by=NULL`. Si hay una sesión activa, la muestra conserva ese propietario.
+La consulta de reportes requiere sesión Django y propiedad de la muestra, incluso
+para usuarios staff. Los reportes de muestras anónimas no están disponibles por
+este endpoint. No se implementa autenticación mediante API key.
 
 | Método y ruta | Resultado |
 | --- | --- |
@@ -66,7 +67,7 @@ el GET incluye `Retry-After: 3`. En `COMPLETED`, `results` contiene `entropy`,
 `hashes` (MD5 y SHA-256), `file_size`, `file_type`, `pe_headers` (secciones e
 imports), `yara_matches` y el estado del escaneo `yara`.
 
-Errores: `400` por archivo ausente o múltiple, `401` por sesión ausente/inactiva,
+Errores: `400` por archivo ausente o múltiple, `401` por sesión ausente/inactiva al consultar reportes,
 `404` por muestra ajena/inexistente o reporte inexistente,
 `413` por tamaño y `415` por contenido distinto de multipart. Un reporte `FAILED`
 se consulta con HTTP `200`, con su estado y un error genérico.
@@ -80,14 +81,13 @@ al worker; no se sobrescriben estados ya reclamados por este.
 
 ## Ejemplo curl
 
-Después de iniciar sesión en `/admin/`, toma la cookie `sessionid`
-de esa sesión. No se requiere token CSRF para la subida. En Bash:
+La subida no requiere cookies ni token CSRF. En Bash:
 
 ```bash
 curl -i http://127.0.0.1:8000/api/samples/ \
-  -b "sessionid=$SESSION_ID" \
   -F "file=@./muestra.exe"
 
+# Para consultar una muestra subida con sesión, usa la cookie de su propietario:
 curl http://127.0.0.1:8000/api/samples/1/report/ \
   -b "sessionid=$SESSION_ID"
 ```
@@ -123,7 +123,7 @@ simultáneas y devuelve el reporte existente cuando ya está `COMPLETED`.
 python manage.py test mallab.tests --settings=mallab.tests.settings
 ```
 
-Incluyen autenticación, subida sin token CSRF, permisos por propietario, tamaño, limpieza en rollback,
+Incluyen autenticación de reportes, subida anónima sin token CSRF, permisos por propietario, tamaño, limpieza en rollback,
 publicación tras commit, fallos del broker, resultados y consumo por un worker
 Celery real con transporte en memoria. Redis debe comprobarse en el despliegue.
 

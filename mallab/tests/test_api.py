@@ -67,14 +67,13 @@ class SampleAPITests(TransactionTestCase):
         self.assertEqual(self.client.get(self.upload_url).status_code, 405)
         self.assertFalse(Sample.objects.exists())
 
-    def test_requires_authenticated_active_user(self):
+    def test_report_requires_authenticated_active_user(self):
         self.client.logout()
-        self.assertEqual(self.upload().status_code, 401)
         self.assertEqual(self.client.get("/api/samples/1/report/").status_code, 401)
         self.user.is_active = False
         self.user.save(update_fields=["is_active"])
         self.client.force_login(self.user)
-        self.assertEqual(self.upload().status_code, 401)
+        self.assertEqual(self.client.get("/api/samples/1/report/").status_code, 401)
 
     def test_upload_without_csrf_returns_sample_id_and_status(self):
         client = Client(enforce_csrf_checks=True)
@@ -87,10 +86,18 @@ class SampleAPITests(TransactionTestCase):
         self.assertEqual(response.json()["status"], "PENDING")
 
         client.logout()
-        response = client.post(self.upload_url, {"file": SimpleUploadedFile("a", b"a")})
-        self.assertEqual(response.status_code, 401)
-        self.assertEqual(response.json()["error"], "authentication_required")
-        self.assertEqual(Sample.objects.count(), 1)
+        with patch("mallab.views.analyze_sample_task.apply_async") as dispatch:
+            response = client.post(self.upload_url, {"file": SimpleUploadedFile("a", b"a")})
+        self.assertEqual(response.status_code, 202)
+        self.assertEqual(response["Content-Type"], "application/json")
+        sample = Sample.objects.get(pk=response.json()["sample_id"])
+        self.assertIsNone(sample.uploaded_by_id)
+        self.assertEqual(response.json()["status"], "PENDING")
+        dispatch.assert_called_once_with(args=[sample.pk], retry=False)
+        self.assertEqual(Sample.objects.count(), 2)
+        self.assertEqual(client.get(response.json()["report_url"]).status_code, 401)
+        client.force_login(self.user)
+        self.assertEqual(client.get(response.json()["report_url"]).status_code, 404)
 
     def test_worker_results_and_owner_only_access(self):
         with patch("mallab.views.analyze_sample_task.apply_async"):

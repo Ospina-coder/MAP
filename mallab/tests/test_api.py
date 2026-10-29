@@ -163,6 +163,49 @@ class SampleAPITests(TransactionTestCase):
         self.assertEqual(self.client.get(url).status_code, 404)
         self.assertEqual(self.client.get("/api/samples/999999/report/").status_code, 404)
 
+    def test_legacy_reports_keep_their_existing_contract(self):
+        with patch("mallab.views.analyze_sample_task.apply_async"):
+            response = self.upload()
+        report = AnalysisReport.objects.get()
+        for version in (None, 1):
+            payload = {"file": {"hashes": {"sha256": "legacy"}}, "pe": {"is_pe": False}, "yara": {"status": "COMPLETED"}}
+            if version:
+                payload["schema_version"] = version
+            report.pe_headers = payload
+            report.status = "COMPLETED"
+            report.save()
+            body = self.client.get(response.json()["report_url"]).json()
+            self.assertNotIn("analysis", body)
+            self.assertEqual(body["results"]["hashes"], {"sha256": "legacy"})
+            self.assertEqual(set(body["results"]), {"entropy", "hashes", "file_size", "file_type", "pe_headers", "yara_matches", "yara"})
+            report.refresh_from_db()
+            self.assertEqual(report.pe_headers, payload)
+
+    def test_version_two_extension_keeps_partial_failures_and_owner_checks(self):
+        with patch("mallab.views.analyze_sample_task.apply_async"):
+            response = self.upload()
+        url = response.json()["report_url"]
+        result = analyze_sample_task.run(response.json()["sample_id"])
+        self.assertEqual(result["status"], "COMPLETED")
+        body = self.client.get(url).json()
+        self.assertEqual(body["analysis"]["schema_version"], 2)
+        self.assertEqual(body["analysis"]["heuristics"]["status"], "COMPLETED")
+        self.assertIn("hashes", body["results"])
+        report = AnalysisReport.objects.get()
+        report.status = "FAILED"
+        report.pe_headers["yara"] = {"status": "COMPLETED", "match_count": 1}
+        report.yara_matches = [{"rule": "MAP_Test", "namespace": "rules_0", "tags": [], "meta": {}}]
+        report.pe_headers["clamav"] = {"status": "ERROR", "reason": "timeout", "signatures": []}
+        report.pe_headers["error"] = {"stage": "clamav", "message": "private details"}
+        report.save()
+        body = self.client.get(url).json()
+        self.assertEqual(body["analysis"]["clamav"]["reason"], "timeout")
+        self.assertEqual(body["analysis"]["yara"]["matches"], report.yara_matches)
+        self.assertNotIn("results", body)
+        self.assertNotIn("private details", str(body))
+        self.client.force_login(self.other)
+        self.assertEqual(self.client.get(url).status_code, 404)
+
     def test_broker_failure_preserves_sample_and_marks_failed(self):
         with patch("mallab.views.analyze_sample_task.apply_async", side_effect=ConnectionError("private broker address")):
             with self.assertLogs("mallab.views", level="ERROR"):

@@ -129,6 +129,20 @@ def get_analysis_report(request, sample_id):
     elif report.status == AnalysisReport.Status.FAILED:
         # La API no devuelve detalles del parser ni rutas internas en fallos.
         body["error"] = {"stage": report.pe_headers.get("error", {}).get("stage", "analysis"), "message": "No se pudo completar el análisis."}
+    # Extensión aditiva para v2, también en fallos parciales. Los reportes
+    # históricos conservan su respuesta anterior y no se reescriben al leerlos.
+    payload = report.pe_headers
+    if payload.get("schema_version") == 2 and report.status in (
+        AnalysisReport.Status.COMPLETED, AnalysisReport.Status.FAILED,
+    ):
+        body["analysis"] = {
+            "schema_version": 2,
+            "yara": payload.get("yara", {}),
+            "clamav": payload.get("clamav", {}),
+            "heuristics": payload.get("heuristics", {}),
+        }
+        if body["analysis"]["yara"].get("status") == "COMPLETED":
+            body["analysis"]["yara"] = {**body["analysis"]["yara"], "matches": report.yara_matches}
     response = JsonResponse(body)
     if report.status in (AnalysisReport.Status.PENDING, AnalysisReport.Status.PROCESSING):
         response["Retry-After"] = "3"

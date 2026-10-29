@@ -33,7 +33,7 @@ Documentación oficial: https://docs.djangoproject.com/en/5.2/topics/auth/custom
 - `User.user_id`, `Sample.id`, `AnalysisReport.id_analysis` y `AnalysisReport.sample` usan respectivamente las columnas `user_Id`, `Id`, `Id_analysis` e `Id`. La relación del reporte es `OneToOneField`: cada reporte exige una muestra y cada muestra admite como máximo un reporte. Una muestra puede estar temporalmente sin reporte.
 - `AbstractUser` aporta `password`, `is_active` y `date_joined`, además de `username`, campos de nombres nativos y permisos. El acceso sigue usando `username`. `name` es el nombre visible de MalLab. `role` no concede permisos Django; los controlan grupos, permisos, `is_staff` e `is_superuser`.
 - Crea usuarios con `User.objects.create_user(...)` y cambia contraseñas con `set_password()`; nunca asignes contraseñas en texto plano a `password`.
-- `api_key` almacena un hash de Django, no el secreto. `user.rotate_api_key()` persiste el hash y devuelve la clave para mostrarla una sola vez. `user.check_api_key(secret)` la verifica para un usuario previamente identificado. No se incluye un backend de autenticación API; debe identificar al usuario y aplicar límites, revocación y permisos. La clave no se expone en el administrador.
+- `api_key` almacena un hash de Django, no el secreto. `user.rotate_api_key()` persiste el hash y devuelve la clave para mostrarla una sola vez. `user.check_api_key(secret)` la verifica para un usuario previamente identificado. No se incluye un backend de autenticación para este campo personalizado; Basic Auth y Token de DRF sí están configurados y son mecanismos distintos. La clave personalizada no se expone en el administrador.
 - El hash de muestra admite MD5 o SHA-256 hexadecimales. No es único porque varios usuarios pueden subir la misma muestra. Usa una convención de minúsculas en la ingestión; MD5 sirve como identificador heredado, SHA-256 es preferible para muestras nuevas.
 - `JSONField` usa fábricas `list` y `dict` para evitar valores mutables compartidos. La entropía es nula hasta calcularse; se asume Shannon por byte entre 0 y 8.
 - La PK, el correo único, la FK y el OneToOne ya tienen índices implícitos. Se agregan índices para hash, fecha, historial por usuario y estado; no se duplican índices únicos.
@@ -57,3 +57,9 @@ la subida y la consulta requieren `IsAuthenticated`, con Basic Auth, Token o
 sesión Django. Cada muestra se asigna al usuario autenticado. Instala las
 dependencias actualizadas y ejecuta `python manage.py migrate` para habilitar
 los tokens de Django REST Framework.
+
+El [motor estático v2](mallab/STATIC_ENGINE_V2.md) incorpora caché YARA por
+contenido, integración opcional con ClamAV local e indicadores heurísticos
+explicables. Conserva la consulta de reportes históricos y SQLite. Las reglas
+inocuas están en `yara_rules/testing/`; no se activa ningún scanner nuevo ni
+se descarga un conjunto de firmas automáticamente.

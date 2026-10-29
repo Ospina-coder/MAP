@@ -68,6 +68,7 @@ class ExtractionTests(SimpleTestCase):
         from types import SimpleNamespace
         fake = SimpleNamespace(
             FILE_HEADER=SimpleNamespace(TimeDateStamp=0), sections=[],
+            OPTIONAL_HEADER=SimpleNamespace(AddressOfEntryPoint=0),
             DIRECTORY_ENTRY_IMPORT=[SimpleNamespace(dll=b"KERNEL32.dll", imports=[
                 SimpleNamespace(name=b"CreateFileW", ordinal=None, address=4096),
                 SimpleNamespace(name=None, ordinal=12, address=4100),
@@ -100,7 +101,7 @@ class ExtractionTests(SimpleTestCase):
     def test_yara_timeout_propagates(self):
         with TemporaryDirectory() as folder:
             (Path(folder) / "a.yar").write_text("rule a { condition: true }", encoding="utf-8")
-            with patch("mallab.services.analyzer.yara.compile") as compile_rules:
+            with patch("mallab.services.yara_scanner.yara.compile") as compile_rules:
                 compile_rules.return_value.match.side_effect = yara.TimeoutError("timeout")
                 with self.assertRaises(yara.TimeoutError):
                     scan_yara(b"data", folder, timeout=1)

@@ -32,7 +32,9 @@ guarda en `AnalysisReport`; no hace falta un backend de resultados de Celery.
 reporte indica que YARA se omitió. Ver [guía del analizador](ANALYZER.md).
 
 Para producción, establece `DJANGO_DEBUG=0`, una `DJANGO_SECRET_KEY` privada y
-`DJANGO_ALLOWED_HOSTS`. La configuración incluida usa SQLite para desarrollo;
+valores restrictivos de `ALLOWED_HOSTS` y `CSRF_TRUSTED_ORIGINS` en settings.
+Actualmente se conservan los valores permisivos pedidos para desarrollo;
+`DJANGO_ALLOWED_HOSTS` no se lee. La configuración incluida usa SQLite;
 configura PostgreSQL, HTTPS y las cookies seguras en el despliegue. No publiques
 `private-media` ni los archivos de cuarentena como contenido web.
 
@@ -139,3 +141,34 @@ Celery real con transporte en memoria. Redis debe comprobarse en el despliegue.
 
 Referencias: [Celery con Django](https://docs.celeryq.dev/en/v5.5.3/django/first-steps-with-django.html)
 y [recepción de archivos en Django](https://docs.djangoproject.com/en/5.2/topics/http/file-uploads/).
+
+## Extensión aditiva de reportes v2
+
+Los reportes históricos sin versión o con `schema_version=1` conservan su JSON
+anterior. No se migran ni se vuelven a analizar al consultarlos. Los reportes v2
+terminales (`COMPLETED`/`FAILED`) añaden `analysis` en la raíz de la respuesta:
+
+```json
+{
+  "analysis": {
+    "schema_version": 2,
+    "yara": {"status": "COMPLETED", "match_count": 0, "matches": [], "rule_file_count": 1, "ruleset_sha256": "<sha256 del manifiesto>"},
+    "clamav": {"status": "SKIPPED", "reason": "disabled", "signatures": []},
+    "heuristics": {"status": "COMPLETED", "engine_version": 1, "findings": []}
+  }
+}
+```
+
+Es un fragmento ilustrativo: los campos existentes de la respuesta permanecen
+y la heurística incluye parámetros, alcance y límites de interpretación.
+En `FAILED`, `analysis` permite inspeccionar las etapas que sí terminaron; no
+añade el bloque histórico `results`, reservado a `COMPLETED`. No expone rutas
+del socket, contenido de cuarentena ni mensajes arbitrarios de las herramientas.
+Los matches YARA siguen en `results.yara_matches` cuando el reporte está completo;
+los fallos posteriores también los exponen en `analysis.yara.matches` si YARA
+terminó correctamente. Esa extensión usa la columna existente, sin duplicarla en BD.
+
+El estado HTTP de la consulta sigue siendo `200` para reportes accesibles, aun
+si su análisis falló. `COMPLETED` y ausencia de detección no son veredictos de
+seguridad. Autenticación y comprobación de propietario se aplican también a
+la extensión v2. Ver [la guía técnica](STATIC_ENGINE_V2.md).

@@ -16,8 +16,9 @@ Configuración de ejemplo en `settings.py`:
 ```python
 MEDIA_ROOT = BASE_DIR / "private-media"
 ANALYZER_MAX_FILE_BYTES = 64 * 1024 * 1024
-YARA_RULES_DIR = BASE_DIR / "yara_rules"  # None para omitir YARA explícitamente
+YARA_RULES_DIR = BASE_DIR / "yara_rules" / "reviewed"  # Poblar con reglas revisadas antes de activar
 YARA_SCAN_TIMEOUT = 30  # segundos, entero positivo
+CLAMAV_ENABLED = False  # Habilitar solo cuando exista un clamd local configurado
 ```
 
 El almacenamiento de muestras debe ser privado. No publiques `MEDIA_ROOT` con
@@ -131,3 +132,19 @@ los imports por ordinal y el timeout también tienen pruebas controladas.
 
 Referencias: [pefile](https://pefile.readthedocs.io/en/latest/usage/UsageExamples.html)
 y [yara-python](https://yara.readthedocs.io/en/stable/yarapython.html).
+
+## Motor versión 2
+
+Consulta [la auditoría y guía de implementación](STATIC_ENGINE_V2.md) para los
+estados YARA/ClamAV, caché por contenido, heurísticas explicables, límites,
+activación local de ClamAV y compatibilidad de la API. Las reglas inocuas de
+`../yara_rules/testing/` están separadas de `reviewed/` y no se activan por defecto.
+No apuntes al directorio padre `yara_rules/`, porque mezclaría ambos conjuntos.
+
+El payload `AnalysisReport.pe_headers` de reportes nuevos usa `schema_version=2`.
+Mantiene `file`, `pe`, `yara`, `entropy` y la columna `yara_matches`, y añade
+`clamav` y `heuristics`. `COMPLETED` describe la ejecución, no la inocuidad.
+Si una herramienta habilitada falla o ClamAV no está disponible, el reporte es
+`FAILED` con resultados parciales; un YARA omitido o ClamAV deshabilitado queda
+`SKIPPED`. Un error YARA ordinario permite intentar ClamAV; el límite suave
+de Celery interrumpe el pipeline sin iniciar otra herramienta.

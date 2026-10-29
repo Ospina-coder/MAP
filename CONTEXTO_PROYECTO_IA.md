@@ -1,5 +1,10 @@
 # MalLab / MAP — Contexto técnico para una IA
 
+> **Snapshot histórico previo a STATIC ENGINE V2.** Se conserva su contenido y
+> referencia original. Para transferir el estado vigente a otra IA, usar
+> [docs/PROJECT_CONTEXT.md](docs/PROJECT_CONTEXT.md), que incluye V2, pruebas y
+> pendientes de validación Ubuntu. Este archivo no se mantiene como consolidado actual.
+
 Fecha de revisión: 29 de octubre de 2026.
 Código de referencia: rama local `main`, commit `129d84ad3a72ce04d4b2e92a79b349257ccffe5a`.
 Repositorio configurado: https://github.com/Ospina-coder/MAP-Malware-Lab-Analysis-Platform-

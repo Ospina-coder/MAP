@@ -2,6 +2,24 @@
 
 Proyecto Django compatible con Django 5.2 y Python 3.10+, con la app `mallab`, API JSON y procesamiento estático mediante Celery.
 
+## Documentación vigente y transferencia de contexto
+
+El archivo para compartir con otra IA es [docs/PROJECT_CONTEXT.md](docs/PROJECT_CONTEXT.md).
+Consolida estado real, cambios recientes, evidencia local y pendientes Ubuntu
+sin depender del historial del chat. Ver también:
+
+- [Historial de desarrollo](docs/CHANGELOG_DEV.md).
+- [Roadmap por estado de evidencia](docs/ROADMAP.md).
+- [Arquitectura vigente](docs/ARCHITECTURE.md).
+- [Entornos y despliegue](docs/DEPLOYMENT.md).
+- [Instrucciones permanentes para agentes](AGENTS.md).
+
+Se conservan las guías especializadas de [API](mallab/API.md),
+[analizador](mallab/ANALYZER.md), [STATIC ENGINE V2](mallab/STATIC_ENGINE_V2.md)
+y [validación Ubuntu](mallab/DEPLOY_STATIC_ENGINE_V2_UBUNTU.md).
+La existencia de código o procedimientos no acredita el despliegue real.
+El [contexto anterior](CONTEXTO_PROYECTO_IA.md) permanece como snapshot histórico.
+
 ## Integración y migraciones
 
 El proyecto incluido ya configura estos ajustes. Para integrar la app en otro proyecto, agrega en `settings.py`, conservando las apps nativas:
